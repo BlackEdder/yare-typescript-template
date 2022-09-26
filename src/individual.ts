@@ -83,20 +83,6 @@ let structure_map: Record<string, _Structure> = {
 };
 var stars = [ star_zxq, star_a2c, star_p89, star_nua ];
 
-for (let base of bases) {
-  // TODO: What if I control multiple?
-  // spirits should just go to nearest that is uncontrolled or controlled by me
-  if (base.control == "BlackEdder") {
-    my_base = base;
-    break;
-  }
-}
-
-stars.sort(function(a, b) {
-  return distance(a.position, my_base.position) -
-         distance(b.position, my_base.position);
-});
-
 function find_nearest_star(spirit: Spirit) {
   stars.sort(function(a, b) {
     return distance(a.position, spirit.position) -
@@ -140,6 +126,8 @@ function find_nearest_non_enemy_base(spirit: Spirit) {
 
 function choose_behaviour(spirit: Spirit, force: boolean) {
   let beh = behaviour(spirit);
+  if (spirit.hp == 0)
+    return "dead";
   if (beh == "" || force) {
     // just born or forced to change
     beh = "default";
@@ -169,7 +157,7 @@ function choose_behaviour(spirit: Spirit, force: boolean) {
         }
       }
     }
-    console.log("enemy spotted: ", spirit.mark);
+    // console.log("enemy spotted: ", spirit.mark);
   }
   return beh;
 }
@@ -183,13 +171,12 @@ function defend(spirit: Spirit, base_id: string) {
     let enemy = find_closest_enemy(spirit);
     var dist = distance(spirit.position, enemy.position);
     if (dist < 300) {
-      spirit.lock();
+      spirit.move(enemy.position);
       spirit.energize(enemy);
       return;
     }
   }
   if (energy_level(spirit) >= 0.5) {
-    spirit.unlock();
     let target = basemap[base_id];
     spirit.move(target.position);
     spirit.energize(target);
@@ -198,12 +185,11 @@ function defend(spirit: Spirit, base_id: string) {
       set_task(spirit, "harvesting");
       if (energy_level(spirit) > 0.5)
         set_task(spirit, "charging");
-      console.log("defense stopped: ", spirit.mark);
+      // console.log("defense stopped: ", spirit.mark);
     }
     return;
   }
   let target = find_nearest_star(spirit);
-  spirit.unlock();
   spirit.move(target.position);
   spirit.energize(spirit);
 }
@@ -212,11 +198,12 @@ function defend(spirit: Spirit, base_id: string) {
 for (let spirit of my_spirits) {
   if (spirit.hp == 0) {
     set_task(spirit, "dead");
+    set_behaviour(spirit, "dead");
     continue;
   }
 
   set_behaviour(spirit, choose_behaviour(spirit, false));
-  console.log("Mark: ", spirit.mark);
+  // console.log("Mark: ", spirit.mark);
 
   if (task(spirit) == "flee") {
     // Keep fleeing!
@@ -244,29 +231,33 @@ for (let spirit of my_spirits) {
   }
 
   if (task(spirit) == 'harvesting') {
-    spirit.unlock();
     let target = find_nearest_star_with_energy(spirit);
     if (behaviour(spirit) == "maintainer") {
       target = find_nearest_star(spirit);
     }
     if (energy_level(target) > 0.20) {
-      spirit.move(target.position);
-      spirit.energize(spirit);
+      if (distance(spirit.position, target.position) > 200)
+        spirit.move(target.position);
+      else
+        spirit.energize(spirit);
     } else if (energy_level(spirit) > 0.30) {
       set_task(spirit, "charging");
     }
   }
 
   if (task(spirit) == 'charging') {
-    spirit.unlock();
     if (behaviour(spirit) == "maintainer") {
       let target = structure_map[mark_position(spirit, 2)];
-      spirit.move(target.position);
-      spirit.energize(target)
+      if (distance(spirit.position, target.position) > 200)
+        spirit.move(target.position);
+      else
+        spirit.energize(target)
     } else {
       let target = find_nearest_non_enemy_base(spirit);
-      spirit.move(target.position);
-      spirit.energize(target);
+      if (distance(spirit.position, target.position) > 200)
+        spirit.move(target.position);
+      else
+        spirit.energize(target);
     }
   }
 
@@ -277,22 +268,15 @@ for (let spirit of my_spirits) {
     }
     var enemy = find_closest_enemy(spirit);
     var dist = distance(spirit.position, enemy.position);
-    if (dist < 200) {
-      spirit.unlock();
-      let target = find_nearest_non_enemy_base(spirit);
-      spirit.move(target.position);
-      spirit.move(stars[0].position);
-    } else if (dist < 300) {
-      spirit.lock();
+    if (dist < 300) {
+      spirit.move(enemy.position);
       spirit.energize(enemy);
     } else {
-      spirit.unlock();
       spirit.move(enemy.position);
     }
   }
 
   if (task(spirit) == "flee") {
-    spirit.unlock();
     if (energy_level(spirit) > 0 && Math.random() < 0.1) {
       spirit.jump([
         spirit.position[0] + (Math.random() - 0.5) * spirit.energy * 5,
@@ -306,4 +290,15 @@ for (let spirit of my_spirits) {
     }
   }
 }
+
 console.log("We made it to the end: ", my_spirits.length);
+
+let res = my_spirits.reduce<Record<string, number>>((acc, value: Spirit) => {
+  let b = behaviour(value);
+  if (acc[b] == undefined)
+    acc[behaviour(value)] = 1;
+  else
+    acc[behaviour(value)] += 1;
+  return acc;
+}, {});
+console.log(JSON.stringify(res));
