@@ -13,12 +13,23 @@
 // in the Documentation
 //
 // console.log("Here");
-import {distance} from "./basic_functions";
 import {
-  behaviour,
+  base_map,
+  choose_cdf,
+  distance,
+  my_alive_spirits,
+  star_map,
+  structure_map,
+  direction,
+  change_direction,
+  pipe,
+  radian
+} from "./basic_functions";
+import {
   mark_position,
-  set_behaviour,
+  role,
   set_mark_position,
+  set_role,
   set_task,
   task
 } from "./mark";
@@ -37,22 +48,6 @@ function find_closest_enemy(spirit: Spirit) {
 }
 
 var bases = [ base_zxq, base_a2c, base_p89, base_nua ];
-let basemap: Record<string, Base> = {
-  "base_zxq" : base_zxq,
-  "base_a2c" : base_a2c,
-  "base_p89" : base_p89,
-  "base_nua" : base_nua,
-};
-
-let structure_map: Record<string, _Structure> = {
-  "base_zxq" : base_zxq,
-  "base_a2c" : base_a2c,
-  "base_p89" : base_p89,
-  "base_nua" : base_nua,
-  "pylon_u3p" : pylon_u3p,
-  "outpost_mdo" : outpost_mdo,
-};
-var stars = [ star_zxq, star_a2c, star_p89, star_nua ];
 
 function charge_target(spirit: Spirit, target: Entity) {
   if (distance(spirit.position, target.position) > 200)
@@ -62,7 +57,7 @@ function charge_target(spirit: Spirit, target: Entity) {
 }
 
 function charge(spirit: Spirit) {
-  if (behaviour(spirit) == "maintainer") {
+  if (role(spirit) == "maintainer") {
     let target = structure_map[mark_position(spirit, 2)];
     let suit = spirit.sight.friends.map((a) => spirits[a])
                    .filter((b) => {
@@ -126,14 +121,15 @@ function merge(spirit: Spirit) {
 }
 
 function find_nearest_star(spirit: Spirit) {
-  stars.sort(function(a, b) {
+  let arr = Object.keys(star_map).map((k) => star_map[k]).sort(function(a, b) {
     return distance(a.position, spirit.position) -
            distance(b.position, spirit.position);
   });
-  return stars[0];
+  return arr[0];
 }
 
 function find_nearest_star_with_energy(spirit: Spirit) {
+  let stars = Object.keys(star_map).map((k) => star_map[k]);
   var target = stars[0];
   var my_distance = distance(target.position, spirit.position);
   for (let star of stars.slice(1)) {
@@ -147,7 +143,7 @@ function find_nearest_star_with_energy(spirit: Spirit) {
   }
   return target;
 }
-function in_enemy_control(entity: Base) {
+function in_enemy_control(entity: Base | Pylon | Outpost) {
   return (entity.control != "BlackEdder" && entity.control != "");
 }
 
@@ -167,7 +163,7 @@ function find_nearest_non_enemy_base(spirit: Spirit) {
 }
 
 function choose_behaviour(spirit: Spirit, force: boolean) {
-  let beh = behaviour(spirit);
+  let beh = role(spirit);
   if (spirit.hp == 0)
     return "dead";
   if (beh == "" || force) {
@@ -205,27 +201,29 @@ function energy_level(entity: Entity) {
 }
 
 // Spirits decide what to do
-for (let spirit of my_spirits) {
+for (let spirit of my_alive_spirits) {
   if (spirit.hp == 0) {
     set_task(spirit, "dead");
-    set_behaviour(spirit, "dead");
+    set_role(spirit, "dead");
     continue;
   }
 
-  set_behaviour(spirit, choose_behaviour(spirit, false));
+  set_role(spirit, choose_behaviour(spirit, false));
   // console.log("Mark: ", spirit.mark);
 
   if (task(spirit) == "flee") {
     // Keep fleeing!
   } else if (spirit.sight.enemies.length > 0) {
-    if (spirit.energy > 2 && energy_level(spirit) > 0.1) {
+    let te = spirit.sight.enemies.reduce((acc, value) => acc + value.energy, 0);
+    let tf = spirit.sight.friends.reduce((acc, value) => acc + value.energy, 0);
+    if (spirit.energy > 2 && tf > te) {
       set_task(spirit, "attacking");
     } else {
       set_task(spirit, "flee");
     }
-  } else if (spirit.shape == "circles", spirit.sight.friends.length > 25 &&
+  } else if (spirit.shape == "circles", spirit.sight.friends.length > 10 &&
                                             spirit.size == 1 &&
-                                            Math.random() < 0.1) {
+                                            Math.random() < 0.05) {
     set_task(spirit, "merge");
   } else if (spirit.energy == spirit.energy_capacity) {
     set_task(spirit, 'charging');
@@ -235,19 +233,19 @@ for (let spirit of my_spirits) {
 }
 
 // Actions to do
-for (let spirit of my_spirits) {
+for (let spirit of my_alive_spirits) {
   if (task(spirit) == "dead")
     continue;
 
   if (task(spirit) == 'harvesting') {
     let target = find_nearest_star_with_energy(spirit);
-    if (behaviour(spirit) == "maintainer") {
+    if (role(spirit) == "maintainer") {
       target = find_nearest_star(spirit);
     }
-    if (energy_level(target) > 0.20) {
+    if (energy_level(target) > 0.10) {
       if (distance(spirit.position, target.position) > 200)
         spirit.move(target.position);
-      else
+      else if (target.energy > 1)
         spirit.energize(spirit);
     } else if (energy_level(spirit) > 0.30) {
       set_task(spirit, "charging");
@@ -281,15 +279,15 @@ for (let spirit of my_spirits) {
     let target_id = mark_position(spirit, 2);
     if (target_id == "" ||
         (spirit.sight.enemies.length > 0 && Math.random() < 0.25)) {
-      let targets = bases.filter((a) => !in_enemy_control(a));
-      let id = Math.floor(Math.random() * targets.length);
-      if (targets[id] == undefined)
-        target_id = targets[0].id;
-      else
-        target_id = targets[id].id;
+      let targets = Object.keys(star_map);
+      let w = targets.map((_) => 1);
+      let id = choose_cdf(w);
+      if (id >= targets.length)
+        console.log("ERROR")
+      target_id = star_map[targets[id]].id;
       set_mark_position(spirit, 2, target_id);
     }
-    let target = basemap[target_id];
+    let target = star_map[target_id];
     if (energy_level(spirit) > 0.1 && Math.random() < 0.1) {
       spirit.jump([
         spirit.position[0] + (Math.random() - 0.5) * spirit.energy * 5,
@@ -303,19 +301,20 @@ for (let spirit of my_spirits) {
   }
 }
 
-console.log("We made it to the end: ", my_spirits.length);
+console.log("We made it to the end: ", my_alive_spirits.length);
 
-let res = my_spirits.reduce<Record<string, number>>((acc, value: Spirit) => {
-  let b = behaviour(value);
-  if (acc[b] == undefined)
-    acc[behaviour(value)] = 1;
-  else
-    acc[behaviour(value)] += 1;
-  return acc;
-}, {});
+let res =
+    my_alive_spirits.reduce<Record<string, number>>((acc, value: Spirit) => {
+      let b = role(value);
+      if (acc[b] == undefined)
+        acc[role(value)] = 1;
+      else
+        acc[role(value)] += 1;
+      return acc;
+    }, {});
 console.log(JSON.stringify(res));
 
-res = my_spirits.reduce((acc, value: Spirit) => {
+res = my_alive_spirits.reduce((acc, value: Spirit) => {
   let b = task(value);
   if (acc[b] == undefined)
     acc[task(value)] = 1;
