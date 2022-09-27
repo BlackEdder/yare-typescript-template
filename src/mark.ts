@@ -20,13 +20,13 @@ export function set_mark_position(spirit: Spirit, i: number, value: string) {
   spirit.set_mark(arr.join(':'))
 }
 
-export function get_memory(spirit: Spirit, id : string) {
-  return mark_position(spirit, mark_id_map[id]);
-}
+export function get_memory(
+    spirit: Spirit,
+    id: string) { return mark_position(spirit, mark_id_map[id]);}
 
-export function set_memory(spirit: Spirit, id : string, value : string) {
-  return set_mark_position(spirit, mark_id_map[id], value);
-}
+export function set_memory(
+    spirit: Spirit, id: string,
+    value: string) { return set_mark_position(spirit, mark_id_map[id], value);}
 
 export function role(
     spirit: Spirit) { return mark_position(spirit, mark_id_map["role"]);}
@@ -34,11 +34,12 @@ export function role(
 export function task(
     spirit: Spirit) { return mark_position(spirit, mark_id_map["task"]);}
 
-export function set_role(
-    spirit: Spirit,
-    value: string) { set_mark_position(spirit, mark_id_map["role"], value);}
+export function set_role(spirit: Spirit, value: string) {
+  set_mark_position(spirit, mark_id_map["role"], value);
+  set_memory(spirit, "role_info", "");
+}
 
-export function set_task(
-    spirit: Spirit,
-    value: string) { set_mark_position(spirit, mark_id_map["task"], value);}
-
+export function set_task(spirit: Spirit, value: string) {
+  set_mark_position(spirit, mark_id_map["task"], value);
+  set_memory(spirit, "task_info", "");
+}

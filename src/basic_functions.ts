@@ -73,3 +73,13 @@ export function follow(spirit : Spirit, dir : Direction) {
 }
 
 export let pipe = (x, ...fns) => fns.reduce((v, f) => f(v), x);
+
+export function energy_level(entity : Entity) {
+  return entity.energy/entity.energy_capacity;
+}
+
+export function under_enemy_control(entity: Base | Pylon | Outpost) {
+  return (entity.control != "BlackEdder" && entity.control != "");
+}
+
+
